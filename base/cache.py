@@ -62,6 +62,8 @@ class Cache:
 
         ctime = os.stat(record.target).st_ctime_ns
         for file in record.dependencies:
+            if record.target.endswith('.o') and file.endswith('.o'):
+                continue
             if os.stat(file).st_ctime_ns > ctime:
                 return False
 
