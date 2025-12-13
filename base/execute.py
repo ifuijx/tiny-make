@@ -1,11 +1,11 @@
 import subprocess
 import sys
-from typing import overload
+from typing import cast
 
 from .utils import *
 
 
-def _proc_outputs(proc: subprocess.Popen[bytes]) -> tuple[str, str]:
+def _proc_outputs(proc: subprocess.Popen[bytes]) -> tuple[Optional[str], Optional[str]]:
     if proc.poll() is None:
         raise Exception
     stdout, stderr = proc.communicate()
@@ -16,34 +16,21 @@ def _proc_outputs(proc: subprocess.Popen[bytes]) -> tuple[str, str]:
     return stdout, stderr   # type: ignore
 
 
-@overload
-def foreground_execute_handle(executable: str, *args: str) -> subprocess.Popen[bytes]:
-    ...
-
-
-@overload
-def foreground_execute_handle(command: str) -> subprocess.Popen[bytes]:
-    ...
-
-
-def foreground_execute_handle(*args: str) -> subprocess.Popen[bytes]:   # type: ignore
-    if len(args) == 1:
-        command = args[0]
-    else:
-        command = ' '.join(args)
-    cprint(f'executing {command}', Color.GREEN)
-    return subprocess.Popen(command, shell=True)
+def foreground_execute_handle(*args: str) -> subprocess.Popen[bytes]:
+    cprint(f'executing {" ".join(args)}', Color.GREEN)
+    return subprocess.Popen(args)
 
 
 def wait_for_handles(procs: list[subprocess.Popen[bytes]]) -> None:
-    errs : list[tuple[int, str, str]] = []
+    errs : list[tuple[int, list[str], Optional[str]]] = []
     for proc in procs:
         if errs:
             ret = proc.poll()
             if ret is None:
                 proc.kill()
+                proc.wait()
             elif ret != 0:
-                errs.append((ret, proc.args, proc.stderr, _proc_outputs(proc)[1]))  # type: ignore
+                errs.append((ret, proc.args, _proc_outputs(proc)[1]))  # type: ignore
         else:
             proc.communicate()
             if proc.returncode != 0:
@@ -52,24 +39,16 @@ def wait_for_handles(procs: list[subprocess.Popen[bytes]]) -> None:
     if not errs:
         return
 
-    for errno, command, stderr in errs:
+    for errno, args, stderr in errs:
+        command = ' '.join(args)
         cprint(f'execute "{command}" failed, returns {errno}', Color.RED)
-        print(stderr, file=sys.stderr)
+        if stderr is not None:
+            print(stderr, file=sys.stderr)
 
     sys_exit('compilation stopped')
 
 
-@overload
-def foreground_execute(executable: str, *args: str) -> None:
-    ...
-
-
-@overload
-def foreground_execute(command: str) -> None:
-    ...
-
-
-def foreground_execute(*args: str) -> None: # type: ignore
+def foreground_execute(*args: str) -> None:
     proc = foreground_execute_handle(*args)
     proc.communicate()
     if proc.returncode:
@@ -80,6 +59,8 @@ def background_execute(command: str) -> tuple[str, str]:
     proc = subprocess.Popen(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     proc.communicate()
     stdout, stderr = _proc_outputs(proc)
+    stdout = cast(str, stdout)
+    stderr = cast(str, stderr)
     if proc.returncode:
         cprint(f'execute "{command}" failed, returns {proc.returncode}', Color.RED)
         print(stderr, file=sys.stderr)

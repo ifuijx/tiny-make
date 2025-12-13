@@ -22,22 +22,19 @@ def get_version(path: str) -> tuple[int, ...]:
 
 
 @overload
-def _pretty_join(iterable: Iterable[str]) -> str: ...
+def _filter_empty(iterable: Iterable[str]) -> list[str]: ...
 
 @overload
-def _pretty_join(*args: str) -> str: ...
+def _filter_empty(*args: str) -> list[str]: ...
 
 
-def _pretty_join(*args) -> str:    # type: ignore
+def _filter_empty(*args) -> list[str]:    # type: ignore
     if isinstance(args[0], str):
         strings = args      # type: ignore
     else:
         strings = args[0]   # type: ignore
     cast(Iterable[str], strings)
-    valid = [s for s in strings if s]   # type: ignore
-    if valid:
-        return ' '.join(valid)  # type: ignore
-    return ''
+    return [s for s in strings if s]   # type: ignore
 
 
 VersionDetails = list[tuple[tuple[int, ...], str]]
@@ -70,20 +67,20 @@ class Compiler:
         ...
 
     @staticmethod
-    def _options_str(source: Source, config: Config) -> str:
+    def _options_expr(source: Source, config: Config) -> list[str]:
         options = config.options.copy()
         options.extend(sorted(source.options()))
-        return _pretty_join(options)
+        return _filter_empty(options)
 
     @staticmethod
-    def _library_includes_str(source: Source) -> str:
+    def _library_includes_expr(source: Source) -> list[str]:
         incls = (lib.include for lib in source.libraries() if lib.include is not None)
-        return _pretty_join(f'-isystem {include}' for include in sorted(incls))
+        return _filter_empty(f'-isystem {include}' for include in sorted(incls))
 
     @staticmethod
-    def _library_paths_str(source: Source) -> str:
+    def _library_paths_expr(source: Source) -> list[str]:
         paths = (lib.libpath for lib in source.libraries() if lib.libpath is not None)
-        return _pretty_join(f'-L{path}' for path in sorted(paths))
+        return _filter_empty(f'-L{path}' for path in sorted(paths))
 
     @staticmethod
     def _library_names(source: Source) -> list[str]:
@@ -96,20 +93,20 @@ class Compiler:
         return list(names)
 
     @staticmethod
-    def _library_names_str(source: Source) -> str:
-        return _pretty_join(f'-l{name}' for name in sorted(Compiler._library_names(source)))
+    def _library_names_expr(source: Source) -> list[str]:
+        return _filter_empty(f'-l{name}' for name in sorted(Compiler._library_names(source)))
 
     @staticmethod
-    def _source_includes_str(source: Source) -> str:
-        return _pretty_join(f'-I{incl}' for incl in sorted(source.includes))
+    def _source_includes_expr(source: Source) -> list[str]:
+        return _filter_empty(f'-I{incl}' for incl in sorted(source.includes))
 
     @staticmethod
     def _objects(source: Source) -> list[str]:
         return [dep.target for dep in source.sources()]
 
     @staticmethod
-    def _objects_str(source: Source) -> str:
-        return _pretty_join(sorted(Compiler._objects(source)))
+    def _objects_expr(source: Source) -> list[str]:
+        return _filter_empty(sorted(Compiler._objects(source)))
 
     @staticmethod
     def _dependencies(source: Source) -> list[str]:
@@ -119,34 +116,34 @@ class Compiler:
         return dependencies
 
     def compile_record(self, source: Source, config: Config) -> Record:
-        command = _pretty_join(
+        command = [
             self.path,
             f'-std={self.max_cpp_std_version()}',
-            self._options_str(source, config),
-            self._library_includes_str(source),
-            self._source_includes_str(source),
+            *self._options_expr(source, config),
+            *self._library_includes_expr(source),
+            *self._source_includes_expr(source),
             '-o',
             source.target,
             '-c',
             source.path,
-        )
+        ]
         return Record(source.target, command, self._dependencies(source))
 
     def _executable_compile_record(self, source: Source, config: Config) -> Record:
         exe = os.path.splitext(source.target)[0]
-        command = _pretty_join(
+        command = [
             self.path,
             f'-std={self.max_cpp_std_version()}',
-            self._options_str(source, config),
-            self._library_paths_str(source),
-            self._library_includes_str(source),
-            self._source_includes_str(source),
+            *self._options_expr(source, config),
+            *self._library_paths_expr(source),
+            *self._library_includes_expr(source),
+            *self._source_includes_expr(source),
             '-o',
             exe,
-            self._objects_str(source),
+            *self._objects_expr(source),
             source.path,
-            self._library_names_str(source),
-        )
+            *self._library_names_expr(source),
+        ]
         return Record(exe, command, self._dependencies(source))
 
     def compile(self, source: Source, config: Config) -> str:
@@ -160,7 +157,7 @@ class Compiler:
                 cprint(f'found cache for "{record.target}", skip compiling ...', Color.GREEN)
             else:
                 os.makedirs(os.path.dirname(record.target), exist_ok=True)
-                procs.append(foreground_execute_handle(record.command))
+                procs.append(foreground_execute_handle(*record.args))
 
         wait_for_handles(procs)
 
@@ -170,7 +167,7 @@ class Compiler:
             cprint(f'found cache for "{exe.target}", skip compiling ...', Color.GREEN)
         else:
             os.makedirs(os.path.dirname(exe.target), exist_ok=True)
-            foreground_execute(exe.command)
+            foreground_execute(*exe.args)
 
         records.append(exe)
         cache.save(records)
