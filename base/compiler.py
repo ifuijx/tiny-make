@@ -179,7 +179,7 @@ class Compiler:
     def compile_commands(self, module: Module, config: Config) -> list[CompileCommand]:
         return [
             {
-                'directory': os.path.join(env.root(), os.path.split(source.path)[0]),
+                'directory': env.root(),
                 'command': self.compile_record(source, config).command,
                 'file': source.path,
             }
