@@ -54,7 +54,7 @@ if __name__ == '__main__':
     env.set_verbose(ns.verbose)
 
     config = global_config()
-    config.update(Config(ns.performance, ns.compiler, ns.link, []))
+    config.update(Config(ns.performance, ns.compiler, ns.debug, ns.link, []))
 
     if ns.clear:
         clear_cache()

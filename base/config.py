@@ -13,6 +13,7 @@ from .utils import sys_exit
 class Config:
     optimize: bool
     prefer: str
+    use_sanitizer: bool
     links: list[str]
     libraries: list[Library]
 
@@ -20,9 +21,9 @@ class Config:
     def options(self) -> list[str]:
         if self.optimize:
             return ['-O3']
+        elif self.use_sanitizer:
+            return ['-g', '-O0', '-fno-omit-frame-pointer', '-fsanitize=address']
         else:
-            # TODO: address sanitizer
-            # return ['-g', '-O0', '-fno-omit-frame-pointer', '-fsanitize=address']
             return ['-g', '-O0', '-fno-omit-frame-pointer']
 
     def update(self, config: 'Config') -> None:
@@ -33,7 +34,7 @@ class Config:
 
 
 def default_config() -> Config:
-    return Config(False, 'clang++', [], [])
+    return Config(False, 'clang++', False, [], [])
 
 
 def load_config(path: str, *, nonexist_ok: bool=False) -> Config:
